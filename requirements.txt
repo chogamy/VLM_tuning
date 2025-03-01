@@ -1,0 +1,5 @@
+deepspeed==0.16.3
+transformers==4.49.0.dev0
+qwen-vl-utils==0.0.10
+torchvision==0.17.0
+peft==0.14.0
