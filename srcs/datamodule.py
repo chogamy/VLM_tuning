@@ -76,6 +76,8 @@ class DataCollatorForImageTextToText:
     ) -> Dict[str, Any]:
         images, data = zip(*examples)
 
+        # images가 왜 튜플이냐
+
         conversations = [
             format_conversation(
                 image, entry["prefix"], entry["suffix"], self.system_message
@@ -89,9 +91,11 @@ class DataCollatorForImageTextToText:
             )
             for conversation in conversations
         ]
+
         image_inputs = [
             process_vision_info(conversation)[0] for conversation in conversations
         ]
+
         model_inputs = self.processor(
             text=texts, images=image_inputs, return_tensors="pt", padding=True
         )
@@ -120,16 +124,11 @@ class DataCollatorForImageTextToText:
             system_user_input_length = system_user_model_inputs["input_ids"].shape[1]
             labels[conversation_index, :system_user_input_length] = -100
 
-        input_ids = model_inputs["input_ids"]
-        attention_mask = model_inputs["attention_mask"]
-        pixel_values = model_inputs["pixel_values"]
-        image_grid_thw = model_inputs["image_grid_thw"]
-
         batch = {}
-        batch["input_ids"] = input_ids
-        batch["attention_mask"] = attention_mask
-        batch["pixel_values"] = pixel_values
-        batch["image_grid_thw"] = image_grid_thw
+        batch["input_ids"] = model_inputs["input_ids"]
+        batch["attention_mask"] = model_inputs["attention_mask"]
+        batch["pixel_values"] = model_inputs["pixel_values"]
+        batch["image_grid_thw"] = model_inputs["image_grid_thw"]
         batch["labels"] = labels
 
         return batch
