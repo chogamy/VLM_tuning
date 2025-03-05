@@ -8,12 +8,16 @@
 
 - TODO: cpu offload error
 
+- TODO: error with BnB
+
 
 # Env
 
 - GPU: A6000 * 4
 
 - Ubuntu: 20.04.6 LTS (Focal Fossa)
+
+- nvcc: 11.8
 
 
 # Usage
