@@ -9,7 +9,9 @@ from transformers import (
     AutoProcessor,
     Trainer,
     TrainingArguments,
+    BitsAndBytesConfig,
 )
+
 from peft import LoraConfig, get_peft_model
 
 
@@ -28,8 +30,20 @@ if __name__ == "__main__":
 
     # model_name = "Qwen/Qwen2.5-VL-3B-Instruct"
 
+    # https://github.com/huggingface/transformers/issues/29266
+    # bnb is not compatible with deepspeed
+    # bnb_config = BitsAndBytesConfig(
+    #     load_in_4bit=True,
+    #     bnb_4bit_use_double_quant=True,
+    #     bnb_4bit_quant_type="nf4",
+    #     bnb_4bit_compute_type=torch.bfloat16,
+    # )
+
     model = AutoModelForImageTextToText.from_pretrained(
-        args.model_name, torch_dtype=torch.float16, trust_remote_code=True
+        args.model_name,
+        # device_map="auto",
+        torch_dtype=torch.float16,
+        trust_remote_code=True,
     )
 
     lora_config = LoraConfig(
@@ -66,12 +80,11 @@ if __name__ == "__main__":
         "fp16": {"enabled": True},
         "zero_optimization": {
             "stage": 3,
-            "allgather_partitions": True,
-            "reduce_scatter": True,
-            "contiguous_gradients": True,
-            # "offload_optimizer": {
-            #     "device": "cpu",
-            # },
+            # "allgather_partitions": True,
+            # "reduce_scatter": True,
+            # "contiguous_gradients": True,
+            "offload_optimizer": {"device": "cpu", "pin_memory": True},
+            "offload_param": {"device": "cpu", "pin_memory": True},
         },
     }
 
@@ -98,7 +111,6 @@ HTML 텍스트만 생성한다. 추가적인 설명은 피한다.
 
     training_args = TrainingArguments(
         output_dir="./results",
-        # per_device_train_batch_size=4,
         # gradient_accumulation_steps=2,
         per_device_train_batch_size=1,
         num_train_epochs=3,
