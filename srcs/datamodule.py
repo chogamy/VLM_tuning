@@ -58,6 +58,7 @@ class DataCollatorForImageTextToText:
     processor: Any
     system_message: str
     return_tensors: str = "pt"
+    mode: str = "train"
 
     def __call__(self, features, return_tensors=None):
         if return_tensors is None:
@@ -74,64 +75,105 @@ class DataCollatorForImageTextToText:
     def torch_call(
         self, examples: List[Union[List[int], Any, Dict[str, Any]]]
     ) -> Dict[str, Any]:
-        images, data = zip(*examples)
+        if self.mode == "train":
+            images, data = zip(*examples)
 
-        # images가 왜 튜플이냐
+            conversations = [
+                format_conversation(
+                    image, entry["prefix"], entry["suffix"], self.system_message
+                )
+                for image, entry in zip(images, data)
+            ]
 
-        conversations = [
-            format_conversation(
-                image, entry["prefix"], entry["suffix"], self.system_message
+            texts = [
+                self.processor.apply_chat_template(
+                    conversation=conversation, tokenize=False
+                )
+                for conversation in conversations
+            ]
+
+            image_inputs = [
+                process_vision_info(conversation)[0] for conversation in conversations
+            ]
+
+            model_inputs = self.processor(
+                text=texts, images=image_inputs, return_tensors="pt", padding=True
             )
-            for image, entry in zip(images, data)
-        ]
 
-        texts = [
-            self.processor.apply_chat_template(
-                conversation=conversation, tokenize=False
+            labels = model_inputs["input_ids"].clone()
+            labels[labels == self.processor.tokenizer.pad_token_id] = -100
+
+            image_tokens = [151652, 151653, 151655]
+            for image_token_id in image_tokens:
+                labels[labels == image_token_id] = -100
+
+            for conversation_index, complete_conversation in enumerate(conversations):
+                if len(complete_conversation) < 2:
+                    continue
+                system_user_conversation = complete_conversation[:-1]
+                system_user_text = self.processor.apply_chat_template(
+                    conversation=system_user_conversation, tokenize=False
+                )
+                system_user_image, _ = process_vision_info(system_user_conversation)
+                system_user_model_inputs = self.processor(
+                    text=[system_user_text],
+                    images=[system_user_image],
+                    return_tensors="pt",
+                    padding=True,
+                )
+                system_user_input_length = system_user_model_inputs["input_ids"].shape[
+                    1
+                ]
+                labels[conversation_index, :system_user_input_length] = -100
+
+                if len(labels[conversation_index]) > 9000:
+                    print(conversations)
+
+            batch = {}
+            batch["input_ids"] = model_inputs["input_ids"]
+            batch["attention_mask"] = model_inputs["attention_mask"]
+            batch["pixel_values"] = model_inputs["pixel_values"]
+            batch["image_grid_thw"] = model_inputs["image_grid_thw"]
+            batch["labels"] = labels
+
+            return batch
+
+        else:
+
+            images, data = zip(*examples)
+            prefixes = [entry["prefix"] for entry in data]
+            suffixes = [entry["suffix"] for entry in data]
+            conversations = [
+                format_conversation(
+                    image, entry["prefix"], system_message=self.system_message
+                )
+                for image, entry in zip(images, data)
+            ]
+
+            texts = [
+                self.processor.apply_chat_template(
+                    conversation=conversation, tokenize=False
+                )
+                for conversation in conversations
+            ]
+            image_inputs = [
+                process_vision_info(conversation)[0] for conversation in conversations
+            ]
+            model_inputs = self.processor(
+                text=texts, images=image_inputs, return_tensors="pt", padding=True
             )
-            for conversation in conversations
-        ]
 
-        image_inputs = [
-            process_vision_info(conversation)[0] for conversation in conversations
-        ]
+            batch = {}
 
-        model_inputs = self.processor(
-            text=texts, images=image_inputs, return_tensors="pt", padding=True
-        )
+            batch["input_ids"] = model_inputs["input_ids"]
+            batch["attention_mask"] = model_inputs["attention_mask"]
+            batch["pixel_values"] = model_inputs["pixel_values"]
+            batch["image_grid_thw"] = model_inputs["image_grid_thw"]
+            batch["images"] = images
+            batch["prefixes"] = prefixes
+            batch["suffixes"] = suffixes
 
-        labels = model_inputs["input_ids"].clone()
-        labels[labels == self.processor.tokenizer.pad_token_id] = -100
-
-        image_tokens = [151652, 151653, 151655]
-        for image_token_id in image_tokens:
-            labels[labels == image_token_id] = -100
-
-        for conversation_index, complete_conversation in enumerate(conversations):
-            if len(complete_conversation) < 2:
-                continue
-            system_user_conversation = complete_conversation[:-1]
-            system_user_text = self.processor.apply_chat_template(
-                conversation=system_user_conversation, tokenize=False
-            )
-            system_user_image, _ = process_vision_info(system_user_conversation)
-            system_user_model_inputs = self.processor(
-                text=[system_user_text],
-                images=[system_user_image],
-                return_tensors="pt",
-                padding=True,
-            )
-            system_user_input_length = system_user_model_inputs["input_ids"].shape[1]
-            labels[conversation_index, :system_user_input_length] = -100
-
-        batch = {}
-        batch["input_ids"] = model_inputs["input_ids"]
-        batch["attention_mask"] = model_inputs["attention_mask"]
-        batch["pixel_values"] = model_inputs["pixel_values"]
-        batch["image_grid_thw"] = model_inputs["image_grid_thw"]
-        batch["labels"] = labels
-
-        return batch
+            return batch
 
 
 class JSONLDataset(Dataset):
