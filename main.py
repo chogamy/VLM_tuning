@@ -196,7 +196,8 @@ if __name__ == "__main__":
                 clean_up_tokenization_spaces=False,
             )
 
-            print(result)
+            with open("results.txt", "w", encoding="utf-8") as f:
+                f.write("".join(result))
 
         # TODO: 그냥 모델로 생성
         # TODO: PEFT 모델로 생성
