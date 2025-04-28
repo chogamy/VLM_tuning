@@ -22,6 +22,17 @@
 
 # Usage
 
+- 필요한거 설치
 ```
-bash scripts/test.sh 
+pip install -r requirements.txt
+```
+
+- 학습
+```
+bash scripts/train.sh 
+```
+
+- 추론
+```
+bash scripts/infer.sh 
 ```
